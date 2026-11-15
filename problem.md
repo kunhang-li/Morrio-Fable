@@ -18,7 +18,7 @@
 
 **Actual:** The same request returns `200 OK` with the response body `{"error":"Title is required"}`.
 
-**Root cause:** The title-validation branch in `server/routes/stories.js` explicitly sets the HTTP status to `200`. The incorrect status code is the bug. The response body already identifies the missing title.
+**Root cause:** In server/routes/stories.js, line 25 checks whether the title is missing or blank. Line 26 returns res.status(200).json({ error: 'Title is required' }). The bug is the status code on line 26: it returns 200 OK when the validation failure should return 400 Bad Request.
 
 ### Bug 3 — One image upload produces two timeline cards
 
