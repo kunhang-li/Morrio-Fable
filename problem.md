@@ -10,6 +10,8 @@
 
 **Actual:** The app opens the **Story Editor** immediately after Step 3, skipping the final prompt.
 
+**Initial hypothesis.** The onboarding completion check in `client/src/components/OnboardingFlow.jsx` (line 28) appears to end the flow one step too early. The prompt index starts at `0`, so with four prompts, index `3` points to the fourth prompt. After Step 3 is submitted, `currentStep` advances to `3`. The condition `currentStep >= prompts.length - 1` becomes true at that point, so `onComplete()` runs before the fourth prompt can render.
+
 ### Bug 2 — Missing title returns HTTP 200 instead of HTTP 400
 
 **Expected:** `POST /api/stories` returns `400 Bad Request` when the request body is missing the required `title` field.
@@ -29,3 +31,5 @@
 **Expected:** One uploaded file adds one card to the timeline.
 
 **Actual:** One uploaded file adds two cards labeled `image`.
+
+**Initial hypothesis.** The upload handler in `client/src/components/MediaTimeline.jsx` appears to add the same upload to `mediaItems` twice. Lines 21–22 append a temporary item before the server responds. Lines 34–35 append the saved item returned by the server. Both items remain in the array, so one successful upload produces two timeline cards.
