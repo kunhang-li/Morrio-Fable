@@ -23,7 +23,7 @@ router.get('/:id', auth, (req, res) => {
 router.post('/', auth, (req, res) => {
   const { title, content, prompt_id } = req.body;
   if (!title || title.trim() === '') {
-    return res.status(200).json({ error: 'Title is required' });
+    return res.status(400).json({ error: 'Title is required' });
   }
   try {
     const db = getDb();
