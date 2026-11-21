@@ -54,6 +54,16 @@ describe('POST /api/stories', () => {
       .send({ title: 'No Auth Story', content: 'content' });
     expect(res.status).toBe(401);
   });
+
+  test('returns 400 when story title is missing', async () => {
+    const res = await request(app)
+      .post('/api/stories')
+      .set('x-user-id', '1')
+      .send({ content: 'Story without title' });
+  
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Title is required');
+  });
 });
 
 describe('GET /api/stories', () => {
