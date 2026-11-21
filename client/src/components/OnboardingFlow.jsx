@@ -11,6 +11,7 @@ export default function OnboardingFlow({ userId, onComplete }) {
   const [loading, setLoading] = useState(true);
   const { currentStep, advance, reset, progressPercent } = useStoryProgress(prompts.length);
 
+
   useEffect(() => {
     fetch('/api/prompts')
       .then((r) => r.json())
@@ -30,13 +31,49 @@ export default function OnboardingFlow({ userId, onComplete }) {
   }
 
   const prompt = prompts[currentStep];
-
+  const completed = Math.min(currentStep, prompts.length);
+  const progress = prompts.length > 0 ? Math.round((completed / prompts.length) * 100): 0;
   return (
     <div>
       <p style={{ color: '#888', fontSize: 14 }}>
         Step {currentStep + 1} of {prompts.length}
       </p>
-      {/* TODO: Prompt completion progress bar — render progress bar here using progressPercent */}
+      <div style={{ marginBottom: '20px' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            marginBottom: '8px'
+          }}
+        >
+          <span>Onboarding Progress</span>
+          <span>{progress}%</span>
+        </div>
+
+        <div
+          role="progressbar"
+          aria-label="Onboarding progress"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={progress}
+          style={{
+            width: '100%',
+            height: '10px',
+            backgroundColor: '#e5e7eb',
+            borderRadius: '5px',
+            overflow: 'hidden'
+          }}
+        >
+          <div
+            style={{
+              width: `${progress}%`,
+              height: '100%',
+              backgroundColor: '#2563eb',
+              transition: 'width 0.3s ease'
+            }}
+          />
+        </div>
+      </div>
       <PromptCard
         prompt={prompt}
         userId={userId}

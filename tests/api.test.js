@@ -80,3 +80,86 @@ describe('GET /api/stories', () => {
     expect(res.status).toBe(401);
   });
 });
+
+
+describe('PATCH /api/stories/:id/draft', () => {
+  let storyId;
+
+  beforeEach(async () => {
+    const res = await request(app)
+      .post('/api/stories')
+      .set('x-user-id', '1')
+      .send({
+        title: 'Autosave Test Story',
+        content: 'Original content'
+      });
+
+    expect(res.status).toBe(201);
+    storyId = res.body.id;
+  });
+
+  test('saves draft content and returns 200', async () => {
+    const res = await request(app)
+      .patch(`/api/stories/${storyId}/draft`)
+      .set('x-user-id', '1')
+      .send({
+        draft_content: 'Automatically saved content'
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.draft_content).toBe(
+      'Automatically saved content'
+    );
+  });
+
+  test('returns 400 when draft_content is missing', async () => {
+    const res = await request(app)
+      .patch(`/api/stories/${storyId}/draft`)
+      .set('x-user-id', '1')
+      .send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe(
+      'draft_content must be a string'
+    );
+  });
+
+  test('returns 404 when story does not exist', async () => {
+    const res = await request(app)
+      .patch('/api/stories/999999999/draft')
+      .set('x-user-id', '1')
+      .send({
+        draft_content: 'Some draft'
+      });
+
+    expect(res.status).toBe(404);
+  });
+
+  test('returns 401 when authentication is missing', async () => {
+    const res = await request(app)
+      .patch(`/api/stories/${storyId}/draft`)
+      .send({
+        draft_content: 'Unauthorized draft'
+      });
+
+    expect(res.status).toBe(401);
+  });
+
+  test('persists the draft in SQLite', async () => {
+    const draft = 'Persisted draft content';
+
+    const saveRes = await request(app)
+      .patch(`/api/stories/${storyId}/draft`)
+      .set('x-user-id', '1')
+      .send({ draft_content: draft });
+
+    expect(saveRes.status).toBe(200);
+    const getRes = await request(app)
+      .get(`/api/stories/${storyId}`)
+      .set('x-user-id', '1');
+
+    expect(getRes.status).toBe(200);
+    expect(getRes.body.draft_content).toBe(draft);
+    expect(getRes.body.content).toBe('Original content');
+  });
+});

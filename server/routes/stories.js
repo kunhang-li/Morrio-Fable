@@ -48,6 +48,65 @@ router.put('/:id', auth, (req, res) => {
   res.json(updated);
 });
 
+
+
+router.patch('/:id/draft', auth, (req, res) => {
+  const { draft_content, title } = req.body;
+
+  if (typeof draft_content !== 'string') {
+    return res.status(400).json({
+      error: 'draft_content must be a string'
+    });
+  }
+
+  if (title !== undefined &&
+      (typeof title !== 'string' || !title.trim())) {
+    return res.status(400).json({
+      error: 'Title must be a non-empty string'
+    });
+  }
+
+  try {
+    const db = getDb();
+
+    const existing = db.prepare(
+      'SELECT * FROM stories WHERE id = ? AND user_id = ?'
+    ).get(req.params.id, req.userId);
+
+    if (!existing) {
+      return res.status(404).json({
+        error: 'Story not found'
+      });
+    }
+
+    // Persist the draft and optionally update the story title.
+    db.prepare(`
+      UPDATE stories
+      SET draft_content = ?, title = ?
+      WHERE id = ? AND user_id = ?
+    `).run(
+      draft_content,
+      title === undefined ? existing.title : title.trim(),
+      req.params.id,
+      req.userId
+    );
+
+    const updated = db.prepare(
+      'SELECT * FROM stories WHERE id = ? AND user_id = ?'
+    ).get(req.params.id, req.userId);
+
+    return res.status(200).json(updated);
+  } catch (err) {
+    console.error('Failed to save draft:', err);
+
+    return res.status(500).json({
+      error: 'Failed to save draft'
+    });
+  }
+});
+
+
+
 router.get('/:id/media', auth, (req, res) => {
   const db = getDb();
   const story = db.prepare('SELECT id FROM stories WHERE id = ? AND user_id = ?').get(req.params.id, req.userId);
