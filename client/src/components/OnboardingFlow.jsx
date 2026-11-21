@@ -25,8 +25,7 @@ export default function OnboardingFlow({ userId, onComplete }) {
   if (loading) return <p>Loading prompts…</p>;
   if (!prompts.length) return <p>No prompts available.</p>;
 
-  if (currentStep >= prompts.length - 1) {
-    onComplete && onComplete();
+  if (currentStep >= prompts.length) {
     return null;
   }
 
