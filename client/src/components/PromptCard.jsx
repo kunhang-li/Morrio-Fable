@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-
 export default function PromptCard({ prompt, userId, onNext, isLast, onComplete }) {
   const [response, setResponse] = useState('');
   const [saving, setSaving] = useState(false);
