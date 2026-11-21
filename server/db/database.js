@@ -17,6 +17,12 @@ function initDb() {
   const db = getDb();
   const schema = fs.readFileSync(schemaPath, 'utf8');
   db.exec(schema);
+  const columns = db.prepare('PRAGMA table_info(stories)').all();
+
+  if (!columns.some(column => column.name === 'draft_content')) {
+    db.exec('ALTER TABLE stories ADD COLUMN draft_content TEXT');
+  }
+
   return db;
 }
 

@@ -48,6 +48,51 @@ router.put('/:id', auth, (req, res) => {
   res.json(updated);
 });
 
+
+router.patch('/:id/draft', auth, (req, res) => {
+  const { draft_content } = req.body;
+
+  if (typeof draft_content !== 'string') {
+    return res.status(400).json({
+      error: 'draft_content must be a string'
+    });
+  }
+
+  try {
+    const db = getDb();
+
+    // Make sure the story belongs to the current user.
+    const existing = db.prepare(
+      'SELECT id FROM stories WHERE id = ? AND user_id = ?'
+    ).get(req.params.id, req.userId);
+
+    if (!existing) {
+      return res.status(404).json({
+        error: 'Story not found'
+      });
+    }
+
+    // Save only the draft content, not the published story.
+    db.prepare(
+      'UPDATE stories SET draft_content = ? WHERE id = ? AND user_id = ?'
+    ).run(draft_content, req.params.id, req.userId);
+
+    return res.status(200).json({
+      id: existing.id,
+      draft_content,
+      message: 'Draft saved'
+    });
+
+  } catch (err) {
+    console.error('Failed to save draft:', err);
+
+    return res.status(500).json({
+      error: 'Failed to save draft'
+    });
+  }
+});
+
+
 router.get('/:id/media', auth, (req, res) => {
   const db = getDb();
   const story = db.prepare('SELECT id FROM stories WHERE id = ? AND user_id = ?').get(req.params.id, req.userId);
