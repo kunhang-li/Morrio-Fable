@@ -1,28 +1,46 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback
+} from 'react';
 import MediaTimeline from './MediaTimeline';
-export default function StoryEditor({ userId, storyId, onStorySaved }) {
+const AUTOSAVE_INTERVAL = 30000;
+const DEBOUNCE_DELAY = 500;
+export default function StoryEditor({
+  userId,
+  storyId,
+  onStorySaved
+}) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [status, setStatus] = useState('');
   const [saveStatus, setSaveStatus] = useState('');
-  const contentRef = useRef('');
-  const lastSavedRef = useRef('');
+  const [activeStoryId, setActiveStoryId] = useState(storyId || null);
+  const latestRef = useRef({ title: '', content: '' });
+  const persistedRef = useRef({ title: '', content: '' });
+  const storyIdRef = useRef(storyId || null);
+  const createdHereRef = useRef(null);
+  const onStorySavedRef = useRef(onStorySaved);
   const dirtyRef = useRef(false);
-  const readyRef = useRef(false);
-  const savingRef = useRef(false);
-  const debounceRef = useRef(null);
+  const settledRef = useRef(false);
+  const busyRef = useRef(false);
   const editingRef = useRef(false);
-  const activeStoryRef = useRef(storyId);
-
+  const debounceRef = useRef(null);
   useEffect(() => {
-    contentRef.current = content;
-  }, [content]);
-
+    onStorySavedRef.current = onStorySaved;
+  }, [onStorySaved]);
   useEffect(() => {
-    let cancelled = false;
-    activeStoryRef.current = storyId;
-
     if (!storyId) return;
+
+    storyIdRef.current = storyId;
+    setActiveStoryId(storyId);
+    if (String(createdHereRef.current) === String(storyId)) {
+      return;
+    }
+
+    let cancelled = false;
 
     fetch(`/api/stories/${storyId}`, {
       headers: { 'x-user-id': String(userId) }
@@ -34,146 +52,207 @@ export default function StoryEditor({ userId, storyId, onStorySaved }) {
       .then((story) => {
         if (cancelled || editingRef.current) return;
 
-        const restoredContent =
-          story.draft_content ?? story.content ?? '';
+        const restored = {
+          title: story.title || '',
+          content: story.draft_content ?? story.content ?? ''
+        };
 
-        setTitle(story.title || '');
-        setContent(restoredContent);
-        contentRef.current = restoredContent;
-        lastSavedRef.current = restoredContent;
+        latestRef.current = restored;
+        persistedRef.current = restored;
+
+        setTitle(restored.title);
+        setContent(restored.content);
+
         dirtyRef.current = false;
-        readyRef.current = false;
+        settledRef.current = false;
       })
       .catch(() => {
-        if (!cancelled) setStatus('Failed to load story');
+        if (!cancelled) {
+          setStatus('Failed to load story');
+        }
       });
 
-    return () => {cancelled = true;
+    return () => {
+      cancelled = true;
     };
   }, [storyId, userId]);
 
-  const saveDraft = useCallback(async (force = false) => {
-    if (!storyId || savingRef.current) return;
-    if (!dirtyRef.current) return;
-    if (!force && !readyRef.current) return;
+  function isDirty() {
+    const current = latestRef.current;
+    const saved = persistedRef.current;
 
-    const snapshot = contentRef.current;
+    return current.title !== saved.title ||
+      current.content !== saved.content;
+  }
 
-    if (snapshot === lastSavedRef.current) {
-      dirtyRef.current = false;
-      return;
+  function handleChange(field, value) {
+    editingRef.current = true;
+
+    if (field === 'title') {
+      setTitle(value);
+    } else {
+      setContent(value);
     }
 
-    savingRef.current = true;
+    latestRef.current = {
+      ...latestRef.current,
+      [field]: value
+    };
+
+    dirtyRef.current = isDirty();
+    settledRef.current = false;
+
+    setSaveStatus(
+      dirtyRef.current ? 'Unsaved changes' : 'Saved just now'
+    );
+
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      settledRef.current = true;
+    }, DEBOUNCE_DELAY);
+  }
+
+  const saveDraft = useCallback(async (force = false) => {
+    if (busyRef.current || !dirtyRef.current) return;
+    if (!force && !settledRef.current) return;
+
+    busyRef.current = true;
     setSaveStatus('Saving...');
 
+    const snapshot = { ...latestRef.current };
+
     try {
-      const res = await fetch(`/api/stories/${storyId}/draft`, {
+      let id = storyIdRef.current;
+      if (!id) {
+        const createRes = await fetch('/api/stories', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': String(userId)
+          },
+          body: JSON.stringify({
+            title: snapshot.title.trim() || 'Untitled Story',
+            content: ''
+          })
+        });
+
+        if (!createRes.ok) {
+          throw new Error('Failed to create story');
+        }
+
+        const created = await createRes.json();
+
+        if (!created.id) {
+          throw new Error('Missing story ID');
+        }
+
+        id = created.id;
+        storyIdRef.current = id;
+        createdHereRef.current = id;
+        setActiveStoryId(id);
+
+        if (onStorySavedRef.current) {
+          onStorySavedRef.current(id);
+        }
+      }
+
+      const res = await fetch(`/api/stories/${id}/draft`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           'x-user-id': String(userId)
         },
         body: JSON.stringify({
-          draft_content: snapshot
+          draft_content: snapshot.content,
+          title: snapshot.title.trim() || 'Untitled Story'
         })
       });
 
       if (!res.ok) {
         throw new Error('Draft save failed');
       }
-      if (activeStoryRef.current === storyId) {
-        lastSavedRef.current = snapshot;
-        dirtyRef.current = contentRef.current !== snapshot;
 
-        setSaveStatus(
-          dirtyRef.current ? 'Unsaved changes' : 'Saved just now'
-        );
-      }
-    } catch (_) {
-      if (activeStoryRef.current === storyId) {
-        setSaveStatus('Save failed — click to retry');
-      }
+      persistedRef.current = snapshot;
+      dirtyRef.current = isDirty();
+
+      setSaveStatus(
+        dirtyRef.current ? 'Unsaved changes' : 'Saved just now'
+      );
+    } catch (err) {
+      console.error('Autosave failed:', err);
+      setSaveStatus('Save failed — click to retry');
     } finally {
-      savingRef.current = false;
+      busyRef.current = false;
     }
-  }, [storyId, userId]);
-
+  }, [userId]);
   useEffect(() => {
-    if (!storyId) return;
-
-    const interval = setInterval(() => {saveDraft();}, 30000);
+    const interval = setInterval(() => {
+      saveDraft();
+    }, AUTOSAVE_INTERVAL);
 
     return () => clearInterval(interval);
-  }, [storyId, saveDraft]);
+  }, [saveDraft]);
+
   useEffect(() => {
     return () => clearTimeout(debounceRef.current);
   }, []);
 
-  function handleContentChange(e) {
-    const nextContent = e.target.value;
-
-    editingRef.current = true;
-    setContent(nextContent);
-    contentRef.current = nextContent;
-
-    dirtyRef.current = nextContent !== lastSavedRef.current;
-    readyRef.current = false;
-    setSaveStatus(dirtyRef.current ? 'Unsaved changes' : 'Saved just now');
-
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      readyRef.current = true;
-    }, 500);
-  }
-
   async function handleSave(e) {
     if (e) e.preventDefault();
 
-    if (!title.trim()) {
+    const snapshot = { ...latestRef.current };
+
+    if (!snapshot.title.trim()) {
       setStatus('Title is required.');
       return;
     }
+    if (busyRef.current) {
+      setStatus('Saving in progress. Please retry.');
+      return;
+    }
 
-    const savedContent = contentRef.current;
-    const targetStoryId = storyId;
-
-    setStatus('Saving…');
+    busyRef.current = true;
+    setStatus('Saving...');
 
     try {
-      const method = storyId ? 'PUT' : 'POST';
-      const url = storyId
-        ? `/api/stories/${storyId}`
-        : '/api/stories';
-
-      const res = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': String(userId)
-        },
-        body: JSON.stringify({
-          title,
-          content: savedContent
-        })
-      });
+      const id = storyIdRef.current;
+      const res = await fetch(
+        id ? `/api/stories/${id}` : '/api/stories',
+        {
+          method: id ? 'PUT' : 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': String(userId)
+          },
+          body: JSON.stringify(snapshot)
+        }
+      );
 
       const data = await res.json();
 
       if (!res.ok || !data.id) {
         throw new Error(data.error || 'Error saving story');
       }
-      lastSavedRef.current = savedContent;
-      dirtyRef.current = contentRef.current !== savedContent;
+
+      storyIdRef.current = data.id;
+      createdHereRef.current = data.id;
+      setActiveStoryId(data.id);
+
+      persistedRef.current = snapshot;
+      dirtyRef.current = isDirty();
 
       setStatus('Saved');
       setSaveStatus(
         dirtyRef.current ? 'Unsaved changes' : 'Saved just now'
       );
 
-      if (onStorySaved) onStorySaved(data.id);
+      if (onStorySavedRef.current) {
+        onStorySavedRef.current(data.id);
+      }
     } catch (err) {
       setStatus(err.message || 'Error saving story');
+    } finally {
+      busyRef.current = false;
     }
   }
 
@@ -184,7 +263,7 @@ export default function StoryEditor({ userId, storyId, onStorySaved }) {
       <form onSubmit={handleSave}>
         <input
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          onChange={(e) => handleChange('title', e.target.value)}
           placeholder="Story title"
           style={{
             display: 'block',
@@ -197,7 +276,7 @@ export default function StoryEditor({ userId, storyId, onStorySaved }) {
 
         <textarea
           value={content}
-          onChange={handleContentChange}
+          onChange={(e) => handleChange('content', e.target.value)}
           rows={8}
           placeholder="Write your story…"
           style={{
@@ -213,13 +292,17 @@ export default function StoryEditor({ userId, storyId, onStorySaved }) {
         </button>
 
         {status && (
-          <span style={{ marginLeft: 12, color: '#555', fontSize: 13 }}>
+          <span style={{
+            marginLeft: 12,
+            color: '#555',
+            fontSize: 13
+          }}>
             {status}
           </span>
         )}
       </form>
 
-      {storyId && saveStatus && (
+      {saveStatus && (
         <div style={{ marginTop: 12, fontSize: 13 }}>
           {saveStatus === 'Save failed — click to retry' ? (
             <button
@@ -236,22 +319,22 @@ export default function StoryEditor({ userId, storyId, onStorySaved }) {
               {saveStatus}
             </button>
           ) : (
-            <span
-              role="status"
-              style={{
-                color: saveStatus === 'Saved just now'
-                  ? '#15803d'
-                  : '#555'
-              }}
-            >
+            <span role="status" style={{
+              color: saveStatus === 'Saved just now'
+                ? '#15803d'
+                : '#555'
+            }}>
               {saveStatus}
             </span>
           )}
         </div>
       )}
 
-      {storyId && (
-        <MediaTimeline storyId={storyId} userId={userId} />
+      {activeStoryId && (
+        <MediaTimeline
+          storyId={activeStoryId}
+          userId={userId}
+        />
       )}
     </div>
   );

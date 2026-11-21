@@ -49,8 +49,9 @@ router.put('/:id', auth, (req, res) => {
 });
 
 
+
 router.patch('/:id/draft', auth, (req, res) => {
-  const { draft_content } = req.body;
+  const { draft_content, title } = req.body;
 
   if (typeof draft_content !== 'string') {
     return res.status(400).json({
@@ -58,12 +59,18 @@ router.patch('/:id/draft', auth, (req, res) => {
     });
   }
 
+  if (title !== undefined &&
+      (typeof title !== 'string' || !title.trim())) {
+    return res.status(400).json({
+      error: 'Title must be a non-empty string'
+    });
+  }
+
   try {
     const db = getDb();
 
-    // Make sure the story belongs to the current user.
     const existing = db.prepare(
-      'SELECT id FROM stories WHERE id = ? AND user_id = ?'
+      'SELECT * FROM stories WHERE id = ? AND user_id = ?'
     ).get(req.params.id, req.userId);
 
     if (!existing) {
@@ -72,17 +79,23 @@ router.patch('/:id/draft', auth, (req, res) => {
       });
     }
 
-    // Save only the draft content, not the published story.
-    db.prepare(
-      'UPDATE stories SET draft_content = ? WHERE id = ? AND user_id = ?'
-    ).run(draft_content, req.params.id, req.userId);
-
-    return res.status(200).json({
-      id: existing.id,
+    // Persist the draft and optionally update the story title.
+    db.prepare(`
+      UPDATE stories
+      SET draft_content = ?, title = ?
+      WHERE id = ? AND user_id = ?
+    `).run(
       draft_content,
-      message: 'Draft saved'
-    });
+      title === undefined ? existing.title : title.trim(),
+      req.params.id,
+      req.userId
+    );
 
+    const updated = db.prepare(
+      'SELECT * FROM stories WHERE id = ? AND user_id = ?'
+    ).get(req.params.id, req.userId);
+
+    return res.status(200).json(updated);
   } catch (err) {
     console.error('Failed to save draft:', err);
 
@@ -91,6 +104,7 @@ router.patch('/:id/draft', auth, (req, res) => {
     });
   }
 });
+
 
 
 router.get('/:id/media', auth, (req, res) => {
