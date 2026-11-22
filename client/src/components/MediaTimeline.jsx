@@ -47,8 +47,10 @@ export default function MediaTimeline({ storyId, userId }) {
   
       const saved = await res.json();
   
-      setMediaItems((prev) => [
-        ...prev.filter((item) => item.id !== newItem.id),
+      setMediaItems(prev => [
+        ...prev.filter(item =>
+          newItem.id == null || item.id !== newItem.id
+        ),
         saved
       ]);
   

@@ -112,6 +112,10 @@ await page.getByRole('button', {
 await expect(
   page.getByRole('heading', { name: 'Media Timeline' })
 ).toBeVisible();
+await page.getByRole('button', {
+    name: 'Finish',
+    exact: true
+  }).click();
   await page.locator('input[type="file"]').setInputFiles({
     name: 'test.png',
     mimeType: 'image/png',
