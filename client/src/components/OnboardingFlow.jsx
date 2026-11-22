@@ -26,6 +26,7 @@ export default function OnboardingFlow({ userId, onComplete }) {
   if (loading) return <p>Loading prompts…</p>;
   if (!prompts.length) return <p>No prompts available.</p>;
 
+  // Prevent premature completion caused by zero-based indexing.
   if (currentStep >= prompts.length) {
     return null;
   }

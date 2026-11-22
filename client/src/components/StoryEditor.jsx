@@ -33,7 +33,8 @@ export default function StoryEditor({
   }, [onStorySaved]);
   useEffect(() => {
     if (!storyId) return;
-
+// New stories have no ID yet, so create the record on first autosave.
+// Reuse the generated ID to avoid creating duplicates on retries.
     storyIdRef.current = storyId;
     setActiveStoryId(storyId);
     if (String(createdHereRef.current) === String(storyId)) {

@@ -58,7 +58,8 @@ router.patch('/:id/draft', auth, (req, res) => {
       error: 'draft_content must be a string'
     });
   }
-
+// Invalid input must return HTTP 400 instead of a successful 200.
+// This allows clients and tests to distinguish validation failures.
   if (title !== undefined &&
       (typeof title !== 'string' || !title.trim())) {
     return res.status(400).json({

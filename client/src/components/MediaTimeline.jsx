@@ -46,7 +46,8 @@ export default function MediaTimeline({ storyId, userId }) {
       }
   
       const saved = await res.json();
-  
+// Reconcile the optimistic upload with the server-confirmed item.
+// Avoid removing unrelated media when temporary IDs are missing.
       setMediaItems(prev => [
         ...prev.filter(item =>
           newItem.id == null || item.id !== newItem.id
